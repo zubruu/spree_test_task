@@ -1,12 +1,13 @@
+# frozen_string_literal: true
+
+# Class for product import with variants
 class ImportProduct
+  TAXONS_AVAILABLE_PARAMS = %w[category category_id].freeze
+  STOCK_AVAILABLE_PARAMS = %w[stock_total].freeze
+  EXCEPT_PARAMS = TAXONS_AVAILABLE_PARAMS + STOCK_AVAILABLE_PARAMS
 
-  TAXONS_AVAIABLE_PARAMS = %w(category category_id)
-  STOCK_AVAIABLE_PARAMS = %w(stock_total)
-  EXCEPT_PARAMS = TAXONS_AVAIABLE_PARAMS + STOCK_AVAIABLE_PARAMS
-
-  PRODUCT_REPLACE_PARAMS_NAME = {'availability_date' => 'available_on'}
+  PRODUCT_REPLACE_PARAMS_NAME = { 'availability_date' => 'available_on' }.freeze
   VARIANTS_OPTIONS_PREFIX = 'option_'
-
 
   def initialize(params)
     @params = params
@@ -27,7 +28,7 @@ class ImportProduct
   def procced_existing_product(product)
     @last_procceded_product = product
     @last_procceded_product.update!(@procceded_params)
-    @last_procceded_variant = find_variant if @procceded_params['option_values_hash'] #@last_procceded_product.variants_including_master.last
+    @last_procceded_variant = find_variant if @procceded_params['option_values_hash']
     @last_procceded_variant ||= @last_procceded_product.master
     update_stock_items
   end
@@ -48,7 +49,8 @@ class ImportProduct
 
   def find_variant
     option_id = @procceded_params['option_values_hash'].values
-    variant = Spree::OptionValueVariant.where(variant_id: @last_procceded_product.variants.pluck(:id), option_value_id: option_id).first
+    variant = Spree::OptionValueVariant.where(variant_id: @last_procceded_product.variants.pluck(:id),
+                                              option_value_id: option_id).first
     variant ||= Spree::Variant.create!(product_id: @last_procceded_product.id, option_values: @variant_options)
     variant
   end
@@ -62,7 +64,7 @@ class ImportProduct
 
   def procced_variants_options
     option_values_hash = {}
-    @procceded_params.keys.each do |key|
+    @procceded_params.each_key do |key|
       next unless key.include?(VARIANTS_OPTIONS_PREFIX)
       next unless @procceded_params[key].present?
       type_name = key.split(VARIANTS_OPTIONS_PREFIX)[1]
@@ -70,10 +72,10 @@ class ImportProduct
       @procceded_params.except!(key)
 
       type = Spree::OptionType.where('name = ? or presentation = ?', type_name, type_name).first
-      type = Spree::OptionType.create!(name: type_name, presentation: type_name) unless type
+      type ||= Spree::OptionType.create!(name: type_name, presentation: type_name)
       option_value = Spree::OptionValue.where('(name = ? or presentation = ?) and option_type_id = ?',
                                               value, value, type.id).first
-      option_value = Spree::OptionValue.create!(name: value, presentation: value, option_type_id: type.id) unless option_value
+      option_value ||= Spree::OptionValue.create!(name: value, presentation: value, option_type_id: type.id)
       option_values_hash[type.id] = [option_value.id]
       @variant_options << option_value
     end
@@ -117,10 +119,9 @@ class ImportProduct
   end
 
   def update_stock_items
-    if @procceded_stock_params # for default stock location
-      stock_location = Spree::StockLocation.first # default
-      update_stock_item(@last_procceded_variant, stock_location, @procceded_stock_params)
-    end
+    return unless @procceded_stock_params # for default stock location
+    stock_location = Spree::StockLocation.first # default
+    update_stock_item(@last_procceded_variant, stock_location, @procceded_stock_params)
     # TODO: Diffrent stock locations
   end
 
