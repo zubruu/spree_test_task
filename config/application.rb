@@ -18,6 +18,7 @@ Bundler.require(*Rails.groups)
 
 module SparkTestTask
   class Application < Rails::Application
+    config.autoload_paths += Dir["#{config.root}/lib/**/**/"]
     config.to_prepare do
       # Load application's model / class decorators
       Dir.glob(File.join(File.dirname(__FILE__), "../app/**/*_decorator*.rb")) do |c|
