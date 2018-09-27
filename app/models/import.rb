@@ -2,35 +2,35 @@
 
 require 'csv'
 # General worker class for imports
-class Import
+class Import < ActiveRecord::Base
   BATCH_SIZE = 2 # import size in single delayed_job
 
-  def initialize(file_path, import_type)
-    @file_path = file_path
-    @import_model = import_type
-    @file_length = CSV.read(file_path).length
-  end
+  has_attached_file :file, :content_type => [ "text/plain" ]
+  validates_attachment_file_name :file, :matches => [/csv\Z/]
 
   def start_import
     Import.set_default
-    Import.import(@file_path, @import_model, 0, @file_length)
+    import_model = ImportProduct # logic for switching imports
+    Import.do_import(file.path, import_model, 0)
   end
 
-  def self.import(file_path, import_model, drop_count = 0, file_length)
-    i = 0
-    CSV.foreach('sample.csv', { headers: true, col_sep: ';' }).drop(drop_count).each do |row|
-      next unless row.to_h.compact.present?
+  def self.do_import(file_path, import_model, drop_count = 0)
+    end_of_file = false
+    CSV.foreach(file_path, { headers: true, col_sep: ';' }).drop(drop_count).take(BATCH_SIZE).each do |row|
+      end_of_file = true
+      next if row.to_h.compact.blank?
       begin
         import_row = import_model.new(row.to_h.compact)
         import_row.do_import
       rescue StandardError => e
         log_error(e, row)
       end
-      i += 1
-      break if drop_count + BATCH_SIZE == i
     end
-    Import.delay.import(file_path, import_model, drop_count + BATCH_SIZE, file_length) if drop_count + BATCH_SIZE < file_length
+    return unless end_of_file
+    Import.do_import(file_path, import_model, drop_count + BATCH_SIZE)
   end
+
+  private
 
   class << self
 
